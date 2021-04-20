@@ -14,7 +14,6 @@ import { WorkspaceService } from '../../../client/common/application/workspace';
 import { ExperimentService } from '../../../client/common/experiments/service';
 import { Experiments } from '../../../client/common/utils/localize';
 import * as Telemetry from '../../../client/telemetry';
-import { EventName } from '../../../client/telemetry/constants';
 import { PVSC_EXTENSION_ID_FOR_TESTS } from '../../constants';
 import { MockOutputChannel } from '../../mockClasses';
 import { MockMemento } from '../../mocks/mementos';
@@ -224,11 +223,38 @@ suite('Experimentation service', () => {
             const result = await experimentService.inExperiment(experiment);
 
             assert.isTrue(result);
-            assert.equal(telemetryEvents.length, 1);
-            assert.deepEqual(telemetryEvents[0], {
-                eventName: EventName.PYTHON_EXPERIMENTS_OPT_IN_OUT,
-                properties: { expNameOptedInto: experiment },
-            });
+            assert.equal(telemetryEvents.length, 0);
+        });
+
+        test('If the opt-in setting contains `All`, inExperiment should check the value cached by the experiment service', async () => {
+            configureSettings(true, ['All'], []);
+
+            const experimentService = new ExperimentService(
+                instance(workspaceService),
+                instance(appEnvironment),
+                globalMemento,
+                outputChannel,
+            );
+            const result = await experimentService.inExperiment(experiment);
+
+            assert.isTrue(result);
+            sinon.assert.notCalled(sendTelemetryEventStub);
+            sinon.assert.calledOnce(isCachedFlightEnabledStub);
+        });
+
+        test('If the opt-in setting contains `All` and the experiment setting is disabled, inExperiment should return false', async () => {
+            configureSettings(false, ['All'], []);
+
+            const experimentService = new ExperimentService(
+                instance(workspaceService),
+                instance(appEnvironment),
+                globalMemento,
+                outputChannel,
+            );
+            const result = await experimentService.inExperiment(experiment);
+
+            assert.isFalse(result);
+            sinon.assert.notCalled(sendTelemetryEventStub);
             sinon.assert.notCalled(isCachedFlightEnabledStub);
         });
 
@@ -244,12 +270,8 @@ suite('Experimentation service', () => {
             const result = await experimentService.inExperiment(experiment);
 
             assert.isTrue(result);
-            assert.equal(telemetryEvents.length, 1);
-            assert.deepEqual(telemetryEvents[0], {
-                eventName: EventName.PYTHON_EXPERIMENTS_OPT_IN_OUT,
-                properties: { expNameOptedInto: experiment },
-            });
-            sinon.assert.notCalled(isCachedFlightEnabledStub);
+            assert.equal(telemetryEvents.length, 0);
+            sinon.assert.calledOnce(isCachedFlightEnabledStub);
         });
 
         test('If the opt-out setting contains "All", inExperiment should return false', async () => {
@@ -264,11 +286,23 @@ suite('Experimentation service', () => {
             const result = await experimentService.inExperiment(experiment);
 
             assert.isFalse(result);
-            assert.equal(telemetryEvents.length, 1);
-            assert.deepEqual(telemetryEvents[0], {
-                eventName: EventName.PYTHON_EXPERIMENTS_OPT_IN_OUT,
-                properties: { expNameOptedOutOf: experiment },
-            });
+            sinon.assert.notCalled(sendTelemetryEventStub);
+            sinon.assert.notCalled(isCachedFlightEnabledStub);
+        });
+
+        test('If the opt-out setting contains "All" and the experiment setting is enabled, inExperiment should return false', async () => {
+            configureSettings(true, [], ['All']);
+
+            const experimentService = new ExperimentService(
+                instance(workspaceService),
+                instance(appEnvironment),
+                globalMemento,
+                outputChannel,
+            );
+            const result = await experimentService.inExperiment(experiment);
+
+            assert.isFalse(result);
+            sinon.assert.notCalled(sendTelemetryEventStub);
             sinon.assert.notCalled(isCachedFlightEnabledStub);
         });
 
@@ -284,11 +318,7 @@ suite('Experimentation service', () => {
             const result = await experimentService.inExperiment(experiment);
 
             assert.isFalse(result);
-            assert.equal(telemetryEvents.length, 1);
-            assert.deepEqual(telemetryEvents[0], {
-                eventName: EventName.PYTHON_EXPERIMENTS_OPT_IN_OUT,
-                properties: { expNameOptedOutOf: experiment },
-            });
+            assert.equal(telemetryEvents.length, 0);
             sinon.assert.notCalled(isCachedFlightEnabledStub);
         });
     });

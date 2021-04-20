@@ -3,7 +3,7 @@
 
 import { uniq } from 'lodash';
 import * as path from 'path';
-import { traceVerbose } from '../../../../common/logger';
+import { traceError, traceVerbose } from '../../../../common/logger';
 import { chain, iterable } from '../../../../common/utils/async';
 import { getEnvironmentVariable, getOSType, getUserHomeDir, OSType } from '../../../../common/utils/platform';
 import { PythonEnvInfo, PythonEnvKind, PythonEnvSource } from '../../../base/info';
@@ -16,13 +16,14 @@ import {
     getPythonVersionFromPath,
     looksLikeBasicVirtualPython,
 } from '../../../common/commonUtils';
-import { getFileInfo, pathExists } from '../../../common/externalDependencies';
+import { getFileInfo, pathExists, untildify } from '../../../common/externalDependencies';
 import { isPipenvEnvironment } from './pipEnvHelper';
 import {
     isVenvEnvironment,
     isVirtualenvEnvironment,
     isVirtualenvwrapperEnvironment,
 } from './virtualEnvironmentIdentifier';
+import '../../../../common/extensions';
 
 const DEFAULT_SEARCH_DEPTH = 2;
 /**
@@ -33,9 +34,12 @@ const DEFAULT_SEARCH_DEPTH = 2;
 async function getGlobalVirtualEnvDirs(): Promise<string[]> {
     const venvDirs: string[] = [];
 
-    const workOnHome = getEnvironmentVariable('WORKON_HOME');
-    if (workOnHome && (await pathExists(workOnHome))) {
-        venvDirs.push(workOnHome);
+    let workOnHome = getEnvironmentVariable('WORKON_HOME');
+    if (workOnHome) {
+        workOnHome = untildify(workOnHome);
+        if (await pathExists(workOnHome)) {
+            venvDirs.push(workOnHome);
+        }
     }
 
     const homeDir = getUserHomeDir();
@@ -44,10 +48,8 @@ async function getGlobalVirtualEnvDirs(): Promise<string[]> {
         if (getOSType() !== OSType.Windows) {
             subDirs.push('envs');
         }
-        subDirs
-            .map((d) => path.join(homeDir, d))
-            .filter(pathExists)
-            .forEach((d) => venvDirs.push(d));
+        const filtered = await subDirs.map((d) => path.join(homeDir, d)).asyncFilter(pathExists);
+        filtered.forEach((d) => venvDirs.push(d));
     }
 
     return uniq(venvDirs);
@@ -135,8 +137,17 @@ export class GlobalVirtualEnvironmentLocator extends FSWatchingLocator {
                             // check multiple times. Those checks are file system heavy and
                             // we can use the kind to determine this anyway.
                             const kind = await getVirtualEnvKind(filename);
-                            yield buildSimpleVirtualEnvInfo(filename, kind);
-                            traceVerbose(`Global Virtual Environment: [added] ${filename}`);
+                            if (kind === PythonEnvKind.Unknown) {
+                                // We don't know the environment type so skip this one.
+                                traceVerbose(`Global Virtual Environment: [skipped] ${filename}`);
+                            } else {
+                                try {
+                                    yield buildSimpleVirtualEnvInfo(filename, kind);
+                                    traceVerbose(`Global Virtual Environment: [added] ${filename}`);
+                                } catch (ex) {
+                                    traceError(`Failed to process environment: ${filename}`, ex);
+                                }
+                            }
                         } else {
                             traceVerbose(`Global Virtual Environment: [skipped] ${filename}`);
                         }
@@ -159,6 +170,10 @@ export class GlobalVirtualEnvironmentLocator extends FSWatchingLocator {
             // check multiple times. Those checks are file system heavy and
             // we can use the kind to determine this anyway.
             const kind = await getVirtualEnvKind(executablePath);
+            if (kind === PythonEnvKind.Unknown) {
+                // We don't know the environment type so skip this one.
+                return undefined;
+            }
             return buildSimpleVirtualEnvInfo(executablePath, kind);
         }
         return undefined;

@@ -12,6 +12,7 @@ import { ApplicationShell } from '../../client/common/application/applicationShe
 import { ClipboardService } from '../../client/common/application/clipboard';
 import { CommandManager } from '../../client/common/application/commandManager';
 import { ReloadVSCodeCommandHandler } from '../../client/common/application/commands/reloadCommand';
+import { ReportIssueCommandHandler } from '../../client/common/application/commands/reportIssueCommand';
 import { CustomEditorService } from '../../client/common/application/customEditorService';
 import { DebugService } from '../../client/common/application/debugService';
 import { DebugSessionTelemetry } from '../../client/common/application/debugSessionTelemetry';
@@ -37,7 +38,6 @@ import { EditorUtils } from '../../client/common/editor';
 import { DiscoveryVariants } from '../../client/common/experiments/groups';
 import { ExperimentsManager } from '../../client/common/experiments/manager';
 import { ExperimentService } from '../../client/common/experiments/service';
-import { FeatureDeprecationManager } from '../../client/common/featureDeprecationManager';
 import {
     ExtensionInsidersDailyChannelRule,
     ExtensionInsidersOffChannelRule,
@@ -103,7 +103,6 @@ import {
     IExperimentService,
     IExperimentsManager,
     IExtensions,
-    IFeatureDeprecationManager,
     IFileDownloader,
     IHttpClient,
     IInstaller,
@@ -287,10 +286,6 @@ suite('Module Installer', () => {
                 PipEnvActivationCommandProvider,
                 TerminalActivationProviders.pipenv,
             );
-            ioc.serviceManager.addSingleton<IFeatureDeprecationManager>(
-                IFeatureDeprecationManager,
-                FeatureDeprecationManager,
-            );
 
             ioc.serviceManager.addSingleton<IAsyncDisposableRegistry>(
                 IAsyncDisposableRegistry,
@@ -311,6 +306,10 @@ suite('Module Installer', () => {
             ioc.serviceManager.addSingleton<IExtensionSingleActivationService>(
                 IExtensionSingleActivationService,
                 ReloadVSCodeCommandHandler,
+            );
+            ioc.serviceManager.addSingleton<IExtensionSingleActivationService>(
+                IExtensionSingleActivationService,
+                ReportIssueCommandHandler,
             );
             ioc.serviceManager.addSingleton<IExtensionChannelService>(
                 IExtensionChannelService,

@@ -17,6 +17,10 @@ runs:
       shell: bash
 
     - run: |
+        python -m pip --disable-pip-version-check install -t ./pythonFiles/lib/jedilsp --no-cache-dir --implementation py --platform any --abi none --no-deps --only-binary :all: --upgrade -r jedils_requirements.txt
+      shell: bash
+
+    - run: |
         python -m pip --disable-pip-version-check install -r build/debugger-install-requirements.txt
         python ./pythonFiles/install_debugpy.py
       shell: bash

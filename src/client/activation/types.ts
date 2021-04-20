@@ -72,7 +72,7 @@ export enum LanguageServerType {
 
 export const DotNetLanguageServerFolder = 'languageServer';
 
-export interface LanguageServerCommandHandler {
+interface LanguageServerCommandHandler {
     clearAnalysisCache(): void;
 }
 
@@ -85,7 +85,7 @@ export type ILanguageServerConnection = Pick<
     'sendRequest' | 'sendNotification' | 'onProgress' | 'sendProgress' | 'onNotification' | 'onRequest'
 >;
 
-export interface ILanguageServer
+interface ILanguageServer
     extends RenameProvider,
         DefinitionProvider,
         HoverProvider,
@@ -135,7 +135,6 @@ export interface ILanguageServerPackageService {
     getLanguageServerDownloadChannel(): LanguageServerDownloadChannels;
 }
 
-export const MajorLanguageServerVersion = Symbol('MajorLanguageServerVersion');
 export const IDownloadChannelRule = Symbol('IDownloadChannelRule');
 export interface IDownloadChannelRule {
     shouldLookForNewLanguageServer(currentFolder?: FolderVersionPair): Promise<boolean>;
@@ -144,11 +143,7 @@ export const ILanguageServerCompatibilityService = Symbol('ILanguageServerCompat
 export interface ILanguageServerCompatibilityService {
     isSupported(): Promise<boolean>;
 }
-export enum LanguageClientFactory {
-    base = 'base',
-    simple = 'simple',
-    downloaded = 'downloaded',
-}
+
 export const ILanguageClientFactory = Symbol('ILanguageClientFactory');
 export interface ILanguageClientFactory {
     createLanguageClient(

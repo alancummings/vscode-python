@@ -1,8 +1,7 @@
 import { assert } from 'chai';
 import Sinon, * as sinon from 'sinon';
 import { SemVer } from 'semver';
-import { anything } from 'ts-mockito';
-import { IApplicationShell, ICommandManager } from '../../client/common/application/types';
+import { ViewColumn, workspace, WorkspaceConfiguration } from 'vscode';
 import {
     IExperimentService,
     IInstaller,
@@ -11,6 +10,7 @@ import {
     ProductInstallStatus,
 } from '../../client/common/types';
 import { Common, TensorBoard } from '../../client/common/utils/localize';
+import { IApplicationShell, ICommandManager } from '../../client/common/application/types';
 import { IServiceManager } from '../../client/ioc/types';
 import { TensorBoardEntrypoint, TensorBoardEntrypointTrigger } from '../../client/tensorBoard/constants';
 import { TensorBoardSession } from '../../client/tensorBoard/tensorBoardSession';
@@ -43,6 +43,8 @@ suite('TensorBoard session creation', async () => {
     let commandManager: ICommandManager;
     let experimentService: IExperimentService;
     let installer: IInstaller;
+    let initialValue: string | undefined;
+    let workspaceConfiguration: WorkspaceConfiguration;
 
     suiteSetup(function () {
         if (process.env.CI_PYTHON_VERSION === '2.7') {
@@ -69,9 +71,13 @@ suite('TensorBoard session creation', async () => {
         applicationShell = serviceManager.get<IApplicationShell>(IApplicationShell);
         commandManager = serviceManager.get<ICommandManager>(ICommandManager);
         installer = serviceManager.get<IInstaller>(IInstaller);
+        workspaceConfiguration = workspace.getConfiguration('python.tensorBoard');
+        initialValue = workspaceConfiguration.get('logDirectory');
+        await workspaceConfiguration.update('logDirectory', undefined, true);
     });
 
     teardown(async () => {
+        await workspaceConfiguration.update('logDirectory', initialValue, true);
         await closeActiveWindows();
         sandbox.restore();
     });
@@ -108,6 +114,7 @@ suite('TensorBoard session creation', async () => {
                 TensorBoardEntrypointTrigger.palette,
             )) as TensorBoardSession;
 
+            assert.ok(session.panel?.viewColumn === ViewColumn.One, 'Panel opened in wrong group');
             assert.ok(session.panel?.visible, 'Webview panel not shown on session creation golden path');
             assert.ok(errorMessageStub.notCalled, 'Error message shown on session creation golden path');
         });
@@ -164,22 +171,27 @@ suite('TensorBoard session creation', async () => {
             );
         }
         suite('Install profiler package + upgrade tensorboard', async () => {
-            async function runTest() {
+            async function runTest(expectTensorBoardUpgrade: boolean) {
                 const installStub = sandbox.stub(installer, 'install').resolves(InstallerResponse.Installed);
                 await createSessionAndVerifyMessage(TensorBoard.installTensorBoardAndProfilerPluginPrompt());
-                assert.ok(installStub.calledOnce, 'Did not install anything');
+                assert.ok(installStub.calledTwice, 'Did not install anything');
+                assert.ok(installStub.calledWith(Product.torchProfilerInstallName));
                 assert.ok(
-                    installStub.args[0][0] === Product.torchProfilerInstallName,
-                    'Did not install torch profiler',
+                    installStub.calledWith(
+                        Product.tensorboard,
+                        sinon.match.any,
+                        sinon.match.any,
+                        expectTensorBoardUpgrade,
+                    ),
                 );
             }
             test('In experiment: true, has torch imports: true, is profiler package installed: false, TensorBoard needs upgrade', async () => {
                 configureStubs(true, true, ProductInstallStatus.NeedsUpgrade, false, 'Yes');
-                await runTest();
+                await runTest(true);
             });
             test('In experiment: true, has torch imports: true, is profiler package installed: false, TensorBoard not installed', async () => {
                 configureStubs(true, true, ProductInstallStatus.NotInstalled, false, 'Yes');
-                await runTest();
+                await runTest(false);
             });
         });
         suite('Install profiler only', async () => {
@@ -191,7 +203,7 @@ suite('TensorBoard session creation', async () => {
                 // Ensure we ask to install the profiler package and that it resolves to a cancellation
                 sandbox
                     .stub(installer, 'install')
-                    .withArgs(Product.torchProfilerInstallName, anything(), anything())
+                    .withArgs(Product.torchProfilerInstallName, sinon.match.any, sinon.match.any)
                     .resolves(InstallerResponse.Ignore);
 
                 const session = (await commandManager.executeCommand(
@@ -384,7 +396,7 @@ suite('TensorBoard session creation', async () => {
             // Ensure we ask to install the profiler package and that it resolves to a cancellation
             sandbox
                 .stub(installer, 'install')
-                .withArgs(Product.torchProfilerInstallName, anything(), anything())
+                .withArgs(Product.torchProfilerInstallName, sinon.match.any, sinon.match.any)
                 .resolves(InstallerResponse.Ignore);
 
             const session = (await commandManager.executeCommand(
@@ -407,5 +419,25 @@ suite('TensorBoard session creation', async () => {
             )) as TensorBoardSession;
             assert.ok(session.panel?.visible, 'Webview panel not shown, expected successful session creation');
         });
+    });
+    test('If python.tensorBoard.logDirectory is provided, do not prompt user to pick a log directory', async () => {
+        const selectDirectoryStub = sandbox
+            .stub(applicationShell, 'showQuickPick')
+            .resolves({ label: TensorBoard.useCurrentWorkingDirectory() });
+        errorMessageStub = sandbox.stub(applicationShell, 'showErrorMessage');
+        await workspaceConfiguration.update('logDirectory', 'logs/fit', true);
+
+        const session = (await commandManager.executeCommand(
+            'python.launchTensorBoard',
+            TensorBoardEntrypoint.palette,
+            TensorBoardEntrypointTrigger.palette,
+        )) as TensorBoardSession;
+
+        assert.ok(session.panel?.visible, 'Expected successful session creation but webpanel not shown');
+        assert.ok(errorMessageStub.notCalled, 'Expected successful session creation but error message was shown');
+        assert.ok(
+            selectDirectoryStub.notCalled,
+            'Prompted user to select log directory although setting was specified',
+        );
     });
 });

@@ -20,7 +20,6 @@ import {
 } from 'vscode';
 import { LanguageServerType } from '../activation/types';
 import { LogLevel } from '../logging/levels';
-import type { CommandsWithoutArgs } from './application/commands';
 import type { ExtensionChannels } from './insidersBuild/types';
 import type { InterpreterUri } from './installer/types';
 import { EnvironmentVariables } from './variables/types';
@@ -42,14 +41,6 @@ export interface IPersistentState<T> {
     readonly value: T;
     updateValue(value: T): Promise<void>;
 }
-export type Version = {
-    raw: string;
-    major: number;
-    minor: number;
-    patch: number;
-    build: string[];
-    prerelease: string[];
-};
 
 export type ReadWrite<T> = {
     -readonly [P in keyof T]: T[P];
@@ -212,6 +203,11 @@ export interface IPythonSettings {
     readonly defaultInterpreterPath: string;
     readonly logging: ILoggingSettings;
     readonly useIsolation: boolean;
+    readonly tensorBoard: ITensorBoardSettings | undefined;
+}
+
+export interface ITensorBoardSettings {
+    readonly logDirectory: string | undefined;
 }
 export interface ISortImportSettings {
     readonly path: string;
@@ -266,6 +262,7 @@ export interface ILintingSettings {
     readonly pycodestyleCategorySeverity: IPycodestyleCategorySeverity;
     readonly flake8CategorySeverity: Flake8CategorySeverity;
     readonly mypyCategorySeverity: IMypyCategorySeverity;
+    cwd?: string;
     prospectorPath: string;
     pylintPath: string;
     pycodestylePath: string;
@@ -325,7 +322,7 @@ export interface IExperiments {
     readonly optOutFrom: string[];
 }
 
-export enum AnalysisSettingsLogLevel {
+enum AnalysisSettingsLogLevel {
     Information = 'Information',
     Error = 'Error',
     Warning = 'Warning',
@@ -342,12 +339,6 @@ export interface IAnalysisSettings {
     readonly disabled: string[];
     readonly traceLogging: boolean;
     readonly logLevel: AnalysisSettingsLogLevel;
-}
-
-export interface IVariableQuery {
-    language: string;
-    query: string;
-    parseExpr: string;
 }
 
 export const IConfigurationService = Symbol('IConfigurationService');
@@ -487,26 +478,6 @@ export interface IPythonExtensionBanner {
 }
 export const BANNER_NAME_PROPOSE_LS = 'ProposePylance';
 
-export type DeprecatedSettingAndValue = {
-    setting: string;
-    values?: unknown[];
-};
-
-export type DeprecatedFeatureInfo = {
-    doNotDisplayPromptStateKey: string;
-    message: string;
-    moreInfoUrl: string;
-    commands?: CommandsWithoutArgs[];
-    setting?: DeprecatedSettingAndValue;
-};
-
-export const IFeatureDeprecationManager = Symbol('IFeatureDeprecationManager');
-
-export interface IFeatureDeprecationManager extends Disposable {
-    initialize(): void;
-    registerDeprecation(deprecatedInfo: DeprecatedFeatureInfo): void;
-}
-
 export const IEditorUtils = Symbol('IEditorUtils');
 export interface IEditorUtils {
     getWorkspaceEditsFromPatch(originalContents: string, patch: string, uri: Uri): WorkspaceEdit;
@@ -594,6 +565,7 @@ export interface IExperimentsManager {
  */
 export const IExperimentService = Symbol('IExperimentService');
 export interface IExperimentService {
+    activate(): Promise<void>;
     inExperiment(experimentName: string): Promise<boolean>;
     getExperimentValue<T extends boolean | number | string>(experimentName: string): Promise<T | undefined>;
 }

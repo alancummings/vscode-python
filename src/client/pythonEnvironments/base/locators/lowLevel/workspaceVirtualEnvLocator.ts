@@ -4,7 +4,7 @@
 import { uniq } from 'lodash';
 import * as path from 'path';
 import { Uri } from 'vscode';
-import { traceVerbose } from '../../../../common/logger';
+import { traceError, traceVerbose } from '../../../../common/logger';
 import { chain, iterable } from '../../../../common/utils/async';
 import {
     findInterpretersInDir,
@@ -22,6 +22,7 @@ import { PythonEnvInfo, PythonEnvKind, PythonEnvSource } from '../../info';
 import { buildEnvInfo } from '../../info/env';
 import { IPythonEnvsIterator } from '../../locator';
 import { FSWatchingLocator } from './fsWatchingLocator';
+import '../../../../common/extensions';
 
 /**
  * Default number of levels of sub-directories to recurse when looking for interpreters.
@@ -31,8 +32,8 @@ const DEFAULT_SEARCH_DEPTH = 2;
 /**
  * Gets all default virtual environment locations to look for in a workspace.
  */
-function getWorkspaceVirtualEnvDirs(root: string): string[] {
-    return [root, path.join(root, '.direnv')].filter(pathExists);
+function getWorkspaceVirtualEnvDirs(root: string): Promise<string[]> {
+    return [root, path.join(root, '.direnv')].asyncFilter(pathExists);
 }
 
 /**
@@ -102,7 +103,7 @@ export class WorkspaceVirtualEnvironmentLocator extends FSWatchingLocator {
 
     protected doIterEnvs(): IPythonEnvsIterator {
         async function* iterator(root: string) {
-            const envRootDirs = getWorkspaceVirtualEnvDirs(root);
+            const envRootDirs = await getWorkspaceVirtualEnvDirs(root);
             const envGenerators = envRootDirs.map((envRootDir) => {
                 async function* generator() {
                     traceVerbose(`Searching for workspace virtual envs in: ${envRootDir}`);
@@ -120,8 +121,18 @@ export class WorkspaceVirtualEnvironmentLocator extends FSWatchingLocator {
                             // check multiple times. Those checks are file system heavy and
                             // we can use the kind to determine this anyway.
                             const kind = await getVirtualEnvKind(filename);
-                            yield buildSimpleVirtualEnvInfo(filename, kind);
-                            traceVerbose(`Workspace Virtual Environment: [added] ${filename}`);
+
+                            if (kind === PythonEnvKind.Unknown) {
+                                // We don't know the environment type so skip this one.
+                                traceVerbose(`Workspace Virtual Environment: [skipped] ${filename}`);
+                            } else {
+                                try {
+                                    yield buildSimpleVirtualEnvInfo(filename, kind);
+                                    traceVerbose(`Workspace Virtual Environment: [added] ${filename}`);
+                                } catch (ex) {
+                                    traceError(`Failed to process environment: ${filename}`, ex);
+                                }
+                            }
                         } else {
                             traceVerbose(`Workspace Virtual Environment: [skipped] ${filename}`);
                         }
@@ -145,6 +156,9 @@ export class WorkspaceVirtualEnvironmentLocator extends FSWatchingLocator {
             // check multiple times. Those checks are file system heavy and
             // we can use the kind to determine this anyway.
             const kind = await getVirtualEnvKind(executablePath);
+            if (kind === PythonEnvKind.Unknown) {
+                return undefined;
+            }
             return buildSimpleVirtualEnvInfo(executablePath, kind, source);
         }
         return undefined;

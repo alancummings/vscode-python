@@ -19,10 +19,7 @@ import {
 } from './types';
 import { noop } from '../utils/misc';
 
-export function getDefaultOptions<T extends ShellOptions | SpawnOptions>(
-    options: T,
-    defaultEnv?: EnvironmentVariables,
-): T {
+function getDefaultOptions<T extends ShellOptions | SpawnOptions>(options: T, defaultEnv?: EnvironmentVariables): T {
     const defaultOptions = { ...options };
     const execOptions = defaultOptions as SpawnOptions;
     if (execOptions) {

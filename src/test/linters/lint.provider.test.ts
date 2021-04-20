@@ -7,13 +7,17 @@ import { Container } from 'inversify';
 import * as TypeMoq from 'typemoq';
 import * as vscode from 'vscode';
 import { LanguageServerType } from '../../client/activation/types';
-import { IApplicationShell, IDocumentManager, IWorkspaceService } from '../../client/common/application/types';
+import {
+    IApplicationShell,
+    ICommandManager,
+    IDocumentManager,
+    IWorkspaceService,
+} from '../../client/common/application/types';
 import { PersistentStateFactory } from '../../client/common/persistentState';
 import { IFileSystem } from '../../client/common/platform/types';
 import {
     GLOBAL_MEMENTO,
     IConfigurationService,
-    IInstaller,
     ILintingSettings,
     IMemento,
     IPersistentStateFactory,
@@ -49,7 +53,6 @@ suite('Linting - Provider', () => {
     let document: TypeMoq.IMock<vscode.TextDocument>;
     let fs: TypeMoq.IMock<IFileSystem>;
     let appShell: TypeMoq.IMock<IApplicationShell>;
-    let linterInstaller: TypeMoq.IMock<IInstaller>;
     let workspaceService: TypeMoq.IMock<IWorkspaceService>;
     let workspaceConfig: TypeMoq.IMock<vscode.WorkspaceConfiguration>;
 
@@ -89,7 +92,6 @@ suite('Linting - Provider', () => {
         serviceManager.addSingletonInstance<IConfigurationService>(IConfigurationService, configService.object);
 
         appShell = TypeMoq.Mock.ofType<IApplicationShell>();
-        linterInstaller = TypeMoq.Mock.ofType<IInstaller>();
 
         workspaceService = TypeMoq.Mock.ofType<IWorkspaceService>();
         workspaceConfig = TypeMoq.Mock.ofType<vscode.WorkspaceConfiguration>();
@@ -99,7 +101,6 @@ suite('Linting - Provider', () => {
         workspaceService.setup((w) => w.getConfiguration('python')).returns(() => workspaceConfig.object);
 
         serviceManager.addSingletonInstance<IApplicationShell>(IApplicationShell, appShell.object);
-        serviceManager.addSingletonInstance<IInstaller>(IInstaller, linterInstaller.object);
         serviceManager.addSingletonInstance<IWorkspaceService>(IWorkspaceService, workspaceService.object);
         serviceManager.add(IAvailableLinterActivator, AvailableLinterActivator);
         serviceManager.addSingleton<IInterpreterAutoSelectionService>(
@@ -113,6 +114,10 @@ suite('Linting - Provider', () => {
         serviceManager.addSingleton<IPersistentStateFactory>(IPersistentStateFactory, PersistentStateFactory);
         serviceManager.addSingleton<vscode.Memento>(IMemento, MockMemento, GLOBAL_MEMENTO);
         serviceManager.addSingleton<vscode.Memento>(IMemento, MockMemento, WORKSPACE_MEMENTO);
+        serviceManager.addSingletonInstance<ICommandManager>(
+            ICommandManager,
+            TypeMoq.Mock.ofType<ICommandManager>().object,
+        );
         lm = new LinterManager(serviceContainer, workspaceService.object);
         serviceManager.addSingletonInstance<ILinterManager>(ILinterManager, lm);
         emitter = new vscode.EventEmitter<vscode.TextDocument>();

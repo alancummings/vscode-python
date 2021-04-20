@@ -6,13 +6,13 @@
 'use strict';
 
 import { inject, injectable } from 'inversify';
-import { Disposable, QuickInput, QuickInputButton, QuickInputButtons, QuickPickItem } from 'vscode';
+import { Disposable, QuickInput, QuickInputButton, QuickInputButtons, QuickPick, QuickPickItem } from 'vscode';
 import { IApplicationShell } from '../application/types';
 
 // Borrowed from https://github.com/Microsoft/vscode-extension-samples/blob/master/quickinput-sample/src/multiStepInput.ts
 // Why re-invent the wheel :)
 
-export class InputFlowAction {
+class InputFlowAction {
     public static back = new InputFlowAction();
 
     public static cancel = new InputFlowAction();
@@ -27,6 +27,18 @@ export class InputFlowAction {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type InputStep<T extends any> = (input: MultiStepInput<T>, state: T) => Promise<InputStep<T> | void>;
 
+type buttonCallbackType<T extends QuickPickItem> = (quickPick: QuickPick<T>) => Promise<void>;
+
+type QuickInputButtonSetup = {
+    /**
+     * Button for an action in a QuickPick.
+     */
+    button: QuickInputButton;
+    /**
+     * Callback to be invoked when button is clicked.
+     */
+    callback: buttonCallbackType<QuickPickItem>;
+};
 export interface IQuickPickParameters<T extends QuickPickItem> {
     title?: string;
     step?: number;
@@ -35,13 +47,13 @@ export interface IQuickPickParameters<T extends QuickPickItem> {
     items: T[];
     activeItem?: T;
     placeholder: string;
-    buttons?: QuickInputButton[];
+    customButtonSetup?: QuickInputButtonSetup;
     matchOnDescription?: boolean;
     matchOnDetail?: boolean;
     acceptFilterBoxTextAsSelection?: boolean;
 }
 
-export interface InputBoxParameters {
+interface InputBoxParameters {
     title: string;
     password?: boolean;
     step?: number;
@@ -63,7 +75,7 @@ export interface IMultiStepInput<S> {
         items,
         activeItem,
         placeholder,
-        buttons,
+        customButtonSetup,
     }: P): Promise<MultiStepInputQuickPicResponseType<T, P>>;
     showInputBox<P extends InputBoxParameters>({
         title,
@@ -94,7 +106,7 @@ export class MultiStepInput<S> implements IMultiStepInput<S> {
         items,
         activeItem,
         placeholder,
-        buttons,
+        customButtonSetup,
         matchOnDescription,
         matchOnDetail,
         acceptFilterBoxTextAsSelection,
@@ -116,11 +128,16 @@ export class MultiStepInput<S> implements IMultiStepInput<S> {
                 } else {
                     input.activeItems = [];
                 }
-                input.buttons = [...(this.steps.length > 1 ? [QuickInputButtons.Back] : []), ...(buttons || [])];
+                input.buttons = this.steps.length > 1 ? [QuickInputButtons.Back] : [];
+                if (customButtonSetup) {
+                    input.buttons = [...input.buttons, customButtonSetup.button];
+                }
                 disposables.push(
-                    input.onDidTriggerButton((item) => {
+                    input.onDidTriggerButton(async (item) => {
                         if (item === QuickInputButtons.Back) {
                             reject(InputFlowAction.back);
+                        } else if (item === customButtonSetup?.button) {
+                            await customButtonSetup.callback(input);
                         } else {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             resolve(item as any);

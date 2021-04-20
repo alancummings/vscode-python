@@ -796,69 +796,24 @@ export interface IEventNamePropertyMapping {
         hashedName: string;
     };
     [EventName.HASHED_PACKAGE_PERF]: never | undefined;
-    /**
-     * Telemetry event sent with details of selection in prompt
-     * `Prompt message` :- 'Linter ${productName} is not installed'
-     */
-    [EventName.LINTER_NOT_INSTALLED_PROMPT]: {
-        /**
-         * Name of the linter
-         *
-         * @type {LinterId}
-         */
-        tool?: LinterId;
-        /**
-         * `select` When 'Select linter' option is selected
-         * `disablePrompt` When 'Do not show again' option is selected
-         * `install` When 'Install' option is selected
-         *
-         * @type {('select' | 'disablePrompt' | 'install')}
-         */
-        action: 'select' | 'disablePrompt' | 'install';
-    };
 
-    /**
-     * Telemetry event sent before showing the linter prompt to install
-     * pylint or flake8.
-     */
-    [EventName.LINTER_INSTALL_PROMPT]: {
-        /**
-         * Identify which prompt was shown.
-         *
-         * @type {('old' | 'noPrompt' | 'pylintFirst' | 'flake8first')}
-         */
-        prompt: 'old' | 'noPrompt' | 'pylintFirst' | 'flake8first';
-    };
-
-    /**
-     * Telemetry event sent after user had selected one of the options
-     * provided by the linter prompt.
-     */
-    [EventName.LINTER_INSTALL_PROMPT_ACTION]: {
-        /**
-         * Identify which prompt was shown.
-         *
-         * @type {('pylintFirst' | 'flake8first')}
-         */
-        prompt: 'pylintFirst' | 'flake8first';
-
-        /**
-         * Which of the following actions did user select
-         *
-         * @type {('pylint' | 'flake8' | 'disablePrompt' | 'close')}
-         */
-        action: 'installPylint' | 'installFlake8' | 'disablePrompt' | 'close';
-    };
     /**
      * Telemetry event sent when installing modules
      */
     [EventName.PYTHON_INSTALL_PACKAGE]: {
         /**
          * The name of the module. (pipenv, Conda etc.)
-         *
-         * @type {string}
+         * One of the possible values includes `unavailable`, meaning user doesn't have pip, conda, or other tools available that can be used to install a python package.
          */
         installer: string;
+        /**
+         * Name of the corresponding product (package) to be installed.
+         */
+        productName?: string;
+        /**
+         * Whether the product (package) has been installed or not.
+         */
+        isInstalled?: boolean;
     };
     /**
      * Telemetry sent with details immediately after linting a document completes
@@ -1305,19 +1260,6 @@ export interface IEventNamePropertyMapping {
      */
     [EventName.PYTHON_EXPERIMENTS_DISABLED]: never | undefined;
     /**
-     * Telemetry event sent with details when a user has requested to opt it or out of an experiment group
-     */
-    [EventName.PYTHON_EXPERIMENTS_OPT_IN_OUT]: {
-        /**
-         * Carries the name of the experiment user has been opted into manually
-         */
-        expNameOptedInto?: string;
-        /**
-         * Carries the name of the experiment user has been opted out of manually
-         */
-        expNameOptedOutOf?: string;
-    };
-    /**
      * Telemetry event sent with details when doing best effort to download the experiments within timeout and using it in the current session only
      */
     [EventName.PYTHON_EXPERIMENTS_DOWNLOAD_SUCCESS_RATE]: {
@@ -1370,6 +1312,11 @@ export interface IEventNamePropertyMapping {
          */
         userAction: string;
     };
+    /**
+     * Telemetry event sent when we fallback from JediLSP to Jedi in cases where JediLSP is
+     * not supported.
+     */
+    [EventName.JEDI_FALLBACK]: unknown;
     /**
      * Telemetry event sent when Jedi Language Server is started for workspace (workspace folder in case of multi-root)
      */
@@ -1863,4 +1810,11 @@ export interface IEventNamePropertyMapping {
         wasProfilerPluginInstalled: boolean;
         wasTensorBoardInstalled: boolean;
     };
+    /**
+     * Telemetry event sent when the user's files contain a PyTorch profiler module
+     * import. Files are checked for matching imports when they are opened or saved.
+     * Matches cover import statements of the form `import torch.profiler` and
+     * `from torch import profiler`.
+     */
+    [EventName.TENSORBOARD_TORCH_PROFILER_IMPORT]: never | undefined;
 }

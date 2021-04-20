@@ -1,25 +1,38 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
-
+import * as fs from 'fs-extra';
 import { ChildProcess } from 'child_process';
 import * as path from 'path';
 import {
     CancellationToken,
     CancellationTokenSource,
+    Position,
     Progress,
     ProgressLocation,
     ProgressOptions,
     QuickPickItem,
+    Selection,
+    TextEditorRevealType,
+    Uri,
     ViewColumn,
     WebviewPanel,
+    WebviewPanelOnDidChangeViewStateEvent,
     window,
+    workspace,
 } from 'vscode';
 import { IApplicationShell, ICommandManager, IWorkspaceService } from '../common/application/types';
 import { createPromiseFromCancellation } from '../common/cancellation';
 import { traceError, traceInfo } from '../common/logger';
 import { tensorboardLauncher } from '../common/process/internal/scripts';
 import { IProcessServiceFactory, ObservableExecutionResult } from '../common/process/types';
-import { IDisposableRegistry, IInstaller, InstallerResponse, ProductInstallStatus, Product } from '../common/types';
+import {
+    IDisposableRegistry,
+    IInstaller,
+    InstallerResponse,
+    ProductInstallStatus,
+    Product,
+    IPersistentState,
+} from '../common/types';
 import { createDeferred, sleep } from '../common/utils/async';
 import { Common, TensorBoard } from '../common/utils/localize';
 import { StopWatch } from '../common/utils/stopWatch';
@@ -28,6 +41,10 @@ import { sendTelemetryEvent } from '../telemetry';
 import { EventName } from '../telemetry/constants';
 import { ImportTracker } from '../telemetry/importTracker';
 import { TensorBoardPromptSelection, TensorBoardSessionStartResult } from './constants';
+
+enum Messages {
+    JumpToSource = 'jump_to_source',
+}
 
 /**
  * Manages the lifecycle of a TensorBoard session.
@@ -48,6 +65,8 @@ export class TensorBoardSession {
         return this.process;
     }
 
+    private active = false;
+
     private webviewPanel: WebviewPanel | undefined;
 
     private url: string | undefined;
@@ -66,6 +85,7 @@ export class TensorBoardSession {
         private readonly disposables: IDisposableRegistry,
         private readonly applicationShell: IApplicationShell,
         private readonly isInTorchProfilerExperiment: boolean,
+        private readonly globalMemento: IPersistentState<ViewColumn>,
     ) {}
 
     public async initialize(): Promise<void> {
@@ -74,7 +94,7 @@ export class TensorBoardSession {
         if (!tensorBoardWasInstalled) {
             return;
         }
-        const logDir = await this.askUserForLogDir();
+        const logDir = await this.getLogDirectory();
         if (!logDir) {
             return;
         }
@@ -179,19 +199,22 @@ export class TensorBoardSession {
             defaultValue: InstallerResponse.Ignore,
             token: installerToken,
         });
-        let installPromise;
+        const installPromises = [];
         // If need to install torch.profiler and it's not already installed, add it to our list of promises
-        if (needsProfilerPluginInstall) {
-            installPromise = this.installer.install(Product.torchProfilerInstallName, interpreter, installerToken);
-        } else if (needsTensorBoardInstall) {
-            installPromise = this.installer.install(
-                Product.tensorboard,
-                interpreter,
-                installerToken,
-                tensorboardInstallStatus === ProductInstallStatus.NeedsUpgrade,
+        if (needsTensorBoardInstall) {
+            installPromises.push(
+                this.installer.install(
+                    Product.tensorboard,
+                    interpreter,
+                    installerToken,
+                    tensorboardInstallStatus === ProductInstallStatus.NeedsUpgrade,
+                ),
             );
         }
-        await Promise.race([installPromise, cancellationPromise]);
+        if (needsProfilerPluginInstall) {
+            installPromises.push(this.installer.install(Product.torchProfilerInstallName, interpreter, installerToken));
+        }
+        await Promise.race([...installPromises, cancellationPromise]);
 
         // Check install status again after installing
         [tensorboardInstallStatus, profilerPluginInstallStatus] = await Promise.all([
@@ -251,7 +274,15 @@ export class TensorBoardSession {
     // Display a quickpick asking the user to acknowledge our autopopulated log directory or
     // select a new one using the file picker. Default this to the folder that is open in
     // the editor, if any, then the directory that the active text editor is in, if any.
-    private async askUserForLogDir(): Promise<string | undefined> {
+    private async getLogDirectory(): Promise<string | undefined> {
+        // See if the user told us to always use a specific log directory
+        const setting = this.workspaceService.getConfiguration('python.tensorBoard');
+        const settingValue = setting.get<string>('logDirectory');
+        if (settingValue) {
+            traceInfo(`Using log directory specified by python.tensorBoard.logDirectory setting: ${settingValue}`);
+            return settingValue;
+        }
+        // No log directory in settings. Ask the user which directory to use
         const logDir = this.autopopulateLogDirectoryPath();
         const useCurrentWorkingDirectory = TensorBoard.useCurrentWorkingDirectory();
         const selectAFolder = TensorBoard.selectAFolder();
@@ -364,6 +395,7 @@ export class TensorBoardSession {
                         this.url = match[1];
                         urlThatTensorBoardIsRunningAt.resolve('success');
                     }
+                    traceInfo(output.out);
                 } else if (output.source === 'stderr') {
                     traceError(output.out);
                 }
@@ -380,10 +412,11 @@ export class TensorBoardSession {
         traceInfo('Showing TensorBoard panel');
         const panel = this.webviewPanel || this.createPanel();
         panel.reveal();
+        this.active = true;
     }
 
     private createPanel() {
-        const webviewPanel = window.createWebviewPanel('tensorBoardSession', 'TensorBoard', ViewColumn.Two, {
+        const webviewPanel = window.createWebviewPanel('tensorBoardSession', 'TensorBoard', this.globalMemento.value, {
             enableScripts: true,
             retainContextWhenHidden: true,
         });
@@ -397,15 +430,26 @@ export class TensorBoardSession {
             </head>
             <body>
                 <script type="text/javascript">
+                    const vscode = acquireVsCodeApi();
                     function resizeFrame() {
                         var f = window.document.getElementById('vscode-tensorboard-iframe');
                         if (f) {
-                            f.style.height = window.innerHeight / 0.7 + "px";
-                            f.style.width = window.innerWidth / 0.7 + "px";
+                            f.style.height = window.innerHeight / 0.8 + "px";
+                            f.style.width = window.innerWidth / 0.8 + "px";
                         }
                     }
                     resizeFrame();
+                    window.onload = function() {
+                        resizeFrame();
+                    }
                     window.addEventListener('resize', resizeFrame);
+                    window.addEventListener('message', (event) => {
+                        if (!"${this.url}".startsWith(event.origin) || !event.data || !event.data.filename || !event.data.line) {
+                            return;
+                        }
+                        const args = { filename: event.data.filename, line: event.data.line };
+                        vscode.postMessage({ command: '${Messages.JumpToSource}', args: args });
+                    });
                 </script>
                 <iframe
                     id="vscode-tensorboard-iframe"
@@ -418,7 +462,7 @@ export class TensorBoardSession {
                 ></iframe>
                 <style>
                     .responsive-iframe {
-                        transform: scale(0.7);
+                        transform: scale(0.8);
                         transform-origin: 0 0;
                         position: absolute;
                         top: 0;
@@ -439,6 +483,27 @@ export class TensorBoardSession {
                 this.process = undefined;
             }),
         );
+        this.disposables.push(
+            webviewPanel.onDidChangeViewState(async (args: WebviewPanelOnDidChangeViewStateEvent) => {
+                // The webview has been moved to a different viewgroup if it was active before and remains active now
+                if (this.active && args.webviewPanel.active) {
+                    await this.globalMemento.updateValue(webviewPanel.viewColumn ?? ViewColumn.Active);
+                }
+                this.active = args.webviewPanel.active;
+            }),
+        );
+        this.disposables.push(
+            webviewPanel.webview.onDidReceiveMessage((message) => {
+                // Handle messages posted from the webview
+                switch (message.command) {
+                    case Messages.JumpToSource:
+                        jumpToSource(message.args.filename, message.args.line);
+                        break;
+                    default:
+                        break;
+                }
+            }),
+        );
         return webviewPanel;
     }
 
@@ -451,5 +516,25 @@ export class TensorBoardSession {
             return path.dirname(activeTextEditor.document.uri.fsPath);
         }
         return undefined;
+    }
+}
+
+function jumpToSource(fsPath: string, line: number) {
+    if (fs.existsSync(fsPath)) {
+        const uri = Uri.file(fsPath);
+        workspace
+            .openTextDocument(uri)
+            .then((doc) => window.showTextDocument(doc, ViewColumn.Beside))
+            .then((editor) => {
+                // Select the line if it exists in the document
+                if (line < editor.document.lineCount) {
+                    const position = new Position(line, 0);
+                    const selection = new Selection(position, editor.document.lineAt(line).range.end);
+                    editor.selection = selection;
+                    editor.revealRange(selection, TextEditorRevealType.InCenterIfOutsideViewport);
+                }
+            });
+    } else {
+        traceError(`Requested jump to source filepath ${fsPath} does not exist`);
     }
 }

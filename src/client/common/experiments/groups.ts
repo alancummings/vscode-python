@@ -1,13 +1,6 @@
 // Experiment to check whether to show "Extension Survey prompt" or not.
 export enum ShowExtensionSurveyPrompt {
-    control = 'ShowExtensionSurveyPrompt - control',
-    enabled = 'ShowExtensionSurveyPrompt - enabled',
-}
-
-// Experiment to check whether to enable re-load for web apps while debugging.
-export enum WebAppReload {
-    control = 'Reload - control',
-    experiment = 'Reload - experiment',
+    experiment = 'pythonSurveyNotification',
 }
 
 /*
@@ -25,13 +18,6 @@ export enum TryPylance {
     jediPrompt2 = 'tryPylancePromptText2',
 }
 
-// Experiment for the content of the tip being displayed on first extension launch:
-// interpreter selection tip, feedback survey or nothing.
-export enum SurveyAndInterpreterTipNotification {
-    tipExperiment = 'pythonTipPromptWording',
-    surveyExperiment = 'pythonMailingListPromptWording',
-}
-
 // Experiment to switch Jedi to use an LSP instead of direct providers
 export enum JediLSP {
     experiment = 'pythonJediLSP',
@@ -43,21 +29,9 @@ export enum JoinMailingListPromptVariants {
     variant3 = 'pythonJoinMailingListVar3',
 }
 
-// Experiment to use a different method for normalizing code to be sent to the REPL.
-export enum SendSelectionToREPL {
-    experiment = 'pythonSendEntireLineToREPL',
-}
-
 // Feature flag for 'Python: Launch TensorBoard' feature
 export enum NativeTensorBoard {
     experiment = 'pythonTensorboardExperiment',
-}
-
-// Experiment to show a prompt asking users to install or select linter
-export enum LinterInstallationPromptVariants {
-    pylintFirst = 'pythonInstallPylintButtonFirst',
-    flake8First = 'pythonInstallFlake8ButtonFirst',
-    noPrompt = 'pythonNotDisplayLinterPrompt',
 }
 
 // Experiment to control which environment discovery mechanism can be used

@@ -28,6 +28,7 @@ import { WindowsStoreLocator } from './discovery/locators/services/windowsStoreL
 import { EnvironmentInfoService } from './info/environmentInfoService';
 import { isComponentEnabled, registerLegacyDiscoveryForIOC, registerNewDiscoveryForIOC } from './legacyIOC';
 import { EnvironmentsSecurity, IEnvironmentsSecurity } from './security';
+import { PoetryLocator } from './discovery/locators/services/poetryLocator';
 
 /**
  * Set up the Python environments component (during extension activation).'
@@ -118,27 +119,29 @@ async function createLocators(
 }
 
 function createNonWorkspaceLocators(ext: ExtensionState): ILocator[] {
-    let locators: (ILocator & Partial<IDisposable>)[];
+    const locators: (ILocator & Partial<IDisposable>)[] = [];
+    locators.push(
+        // OS-independent locators go here.
+        new PyenvLocator(),
+        new CondaEnvironmentLocator(),
+        new GlobalVirtualEnvironmentLocator(),
+        new CustomVirtualEnvironmentLocator(),
+    );
+
     if (getOSType() === OSType.Windows) {
-        locators = [
+        locators.push(
             // Windows specific locators go here.
             new WindowsRegistryLocator(),
             new WindowsStoreLocator(),
             new WindowsPathEnvVarLocator(),
-        ];
+        );
     } else {
-        locators = [
+        locators.push(
             // Linux/Mac locators go here.
             new PosixKnownPathsLocator(),
-        ];
+        );
     }
-    locators.push(
-        // OS-independent locators go here.
-        new GlobalVirtualEnvironmentLocator(),
-        new PyenvLocator(),
-        new CustomVirtualEnvironmentLocator(),
-        new CondaEnvironmentLocator(),
-    );
+
     const disposables = locators.filter((d) => d.dispose !== undefined) as IDisposable[];
     ext.disposables.push(...disposables);
     return locators;
@@ -164,7 +167,7 @@ function watchRoots(args: WatchRootsArgs): IDisposable {
 
 function createWorkspaceLocator(ext: ExtensionState): WorkspaceLocators {
     const locators = new WorkspaceLocators(watchRoots, [
-        (root: vscode.Uri) => [new WorkspaceVirtualEnvironmentLocator(root.fsPath)],
+        (root: vscode.Uri) => [new WorkspaceVirtualEnvironmentLocator(root.fsPath), new PoetryLocator(root.fsPath)],
         // Add an ILocator factory func here for each kind of workspace-rooted locator.
     ]);
     ext.disposables.push(locators);

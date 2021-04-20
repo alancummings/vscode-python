@@ -6,8 +6,6 @@
 import { inject, injectable, named } from 'inversify';
 import { Memento } from 'vscode';
 import { getExperimentationService, IExperimentationService, TargetPopulation } from 'vscode-tas-client';
-import { sendTelemetryEvent } from '../../telemetry';
-import { EventName } from '../../telemetry/constants';
 import { IApplicationEnvironment, IWorkspaceService } from '../application/types';
 import { PVSC_EXTENSION_ID, STANDARD_OUTPUT_CHANNEL } from '../constants';
 import { GLOBAL_MEMENTO, IExperimentService, IMemento, IOutputChannel } from '../types';
@@ -28,6 +26,8 @@ export class ExperimentService implements IExperimentService {
      */
     public _optOutFrom: string[] = [];
 
+    private readonly enabled: boolean;
+
     private readonly experimentationService?: IExperimentationService;
 
     constructor(
@@ -43,12 +43,15 @@ export class ExperimentService implements IExperimentService {
         this._optInto = optInto.filter((exp) => !exp.endsWith('control'));
         this._optOutFrom = optOutFrom.filter((exp) => !exp.endsWith('control'));
 
-        // Don't initialize the experiment service if the extension's experiments setting is disabled.
-        let enabled = settings.get<boolean>('experiments.enabled');
-        if (enabled === undefined) {
-            enabled = true;
+        // If users opt out of all experiments we treat it as disabling them.
+        // The `experiments.enabled` setting also needs to be explicitly disabled, default to true otherwise.
+        if (this._optOutFrom.includes('All') || settings.get<boolean>('experiments.enabled') === false) {
+            this.enabled = false;
+        } else {
+            this.enabled = true;
         }
-        if (!enabled) {
+
+        if (!this.enabled) {
             return;
         }
 
@@ -73,26 +76,29 @@ export class ExperimentService implements IExperimentService {
         this.logExperiments();
     }
 
+    public async activate(): Promise<void> {
+        if (this.experimentationService) {
+            await this.experimentationService.initializePromise;
+            await this.experimentationService.initialFetch;
+        }
+    }
+
     public async inExperiment(experiment: string): Promise<boolean> {
         if (!this.experimentationService) {
             return false;
         }
 
-        // Currently the service doesn't support opting in and out of experiments,
-        // so we need to perform these checks and send the corresponding telemetry manually.
+        // Currently the service doesn't support opting in and out of experiments.
+        // so we need to perform these checks manually.
         if (this._optOutFrom.includes('All') || this._optOutFrom.includes(experiment)) {
-            sendTelemetryEvent(EventName.PYTHON_EXPERIMENTS_OPT_IN_OUT, undefined, {
-                expNameOptedOutOf: experiment,
-            });
-
             return false;
         }
 
         if (this._optInto.includes('All') || this._optInto.includes(experiment)) {
-            sendTelemetryEvent(EventName.PYTHON_EXPERIMENTS_OPT_IN_OUT, undefined, {
-                expNameOptedInto: experiment,
-            });
-
+            // Check if the user was already in the experiment server-side. We need to do
+            // this to ensure the experiment service is ready and internal states are fully
+            // synced with the experiment server.
+            await this.experimentationService.isCachedFlightEnabled(experiment);
             return true;
         }
 
@@ -104,7 +110,7 @@ export class ExperimentService implements IExperimentService {
             return undefined;
         }
 
-        return this.experimentationService.getTreatmentVariableAsync('vscode', experiment);
+        return this.experimentationService.getTreatmentVariableAsync('vscode', experiment, true);
     }
 
     private logExperiments() {

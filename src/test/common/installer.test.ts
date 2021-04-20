@@ -7,6 +7,7 @@ import { ActiveResourceService } from '../../client/common/application/activeRes
 import { ApplicationEnvironment } from '../../client/common/application/applicationEnvironment';
 import { ClipboardService } from '../../client/common/application/clipboard';
 import { ReloadVSCodeCommandHandler } from '../../client/common/application/commands/reloadCommand';
+import { ReportIssueCommandHandler } from '../../client/common/application/commands/reportIssueCommand';
 import { CustomEditorService } from '../../client/common/application/customEditorService';
 import { DebugService } from '../../client/common/application/debugService';
 import { DebugSessionTelemetry } from '../../client/common/application/debugSessionTelemetry';
@@ -30,7 +31,6 @@ import { CryptoUtils } from '../../client/common/crypto';
 import { EditorUtils } from '../../client/common/editor';
 import { ExperimentsManager } from '../../client/common/experiments/manager';
 import { ExperimentService } from '../../client/common/experiments/service';
-import { FeatureDeprecationManager } from '../../client/common/featureDeprecationManager';
 import {
     ExtensionInsidersDailyChannelRule,
     ExtensionInsidersOffChannelRule,
@@ -104,7 +104,6 @@ import {
     IExperimentService,
     IExperimentsManager,
     IExtensions,
-    IFeatureDeprecationManager,
     IFileDownloader,
     IHttpClient,
     IInstaller,
@@ -127,7 +126,7 @@ import { rootWorkspaceUri, updateSetting } from '../common';
 import { MockModuleInstaller } from '../mocks/moduleInstaller';
 import { MockProcessService } from '../mocks/proc';
 import { UnitTestIocContainer } from '../testing/serviceRegistry';
-import { closeActiveWindows, initializeTest, IS_MULTI_ROOT_TEST } from './../initialize';
+import { closeActiveWindows, initializeTest, IS_MULTI_ROOT_TEST } from '../initialize';
 
 suite('Installer', () => {
     let ioc: UnitTestIocContainer;
@@ -256,11 +255,6 @@ suite('Installer', () => {
             PipEnvActivationCommandProvider,
             TerminalActivationProviders.pipenv,
         );
-        ioc.serviceManager.addSingleton<IFeatureDeprecationManager>(
-            IFeatureDeprecationManager,
-            FeatureDeprecationManager,
-        );
-
         ioc.serviceManager.addSingleton<IAsyncDisposableRegistry>(IAsyncDisposableRegistry, AsyncDisposableRegistry);
         ioc.serviceManager.addSingleton<IMultiStepInputFactory>(IMultiStepInputFactory, MultiStepInputFactory);
         ioc.serviceManager.addSingleton<IImportTracker>(IImportTracker, ImportTracker);
@@ -277,6 +271,10 @@ suite('Installer', () => {
         ioc.serviceManager.addSingleton<IExtensionSingleActivationService>(
             IExtensionSingleActivationService,
             ReloadVSCodeCommandHandler,
+        );
+        ioc.serviceManager.addSingleton<IExtensionSingleActivationService>(
+            IExtensionSingleActivationService,
+            ReportIssueCommandHandler,
         );
         ioc.serviceManager.addSingleton<IExtensionChannelService>(IExtensionChannelService, ExtensionChannelService);
         ioc.serviceManager.addSingleton<IExtensionChannelRule>(
@@ -323,9 +321,11 @@ suite('Installer', () => {
     }
     getNamesAndValues<Product>(Product).forEach((prod) => {
         test(`Ensure isInstalled for Product: '${prod.name}' executes the right command`, async function () {
-            if (new ProductService().getProductType(prod.value) === ProductType.DataScience) {
+            const productType = new ProductService().getProductType(prod.value);
+            if (productType === ProductType.DataScience || productType === ProductType.Linter) {
                 return this.skip();
             }
+
             ioc.serviceManager.addSingletonInstance<IModuleInstaller>(
                 IModuleInstaller,
                 new MockModuleInstaller('one', false),
@@ -336,9 +336,11 @@ suite('Installer', () => {
             );
             ioc.serviceManager.addSingletonInstance<ITerminalHelper>(ITerminalHelper, instance(mock(TerminalHelper)));
             if (prod.value === Product.ctags || prod.value === Product.unittest || prod.value === Product.isort) {
-                return;
+                return undefined;
             }
             await testCheckingIfProductIsInstalled(prod.value);
+
+            return undefined;
         });
     });
 
@@ -348,9 +350,8 @@ suite('Installer', () => {
         const moduleInstallers = ioc.serviceContainer.getAll<MockModuleInstaller>(IModuleInstaller);
         const moduleInstallerOne = moduleInstallers.find((item) => item.displayName === 'two')!;
 
-        moduleInstallerOne.on('installModule', (moduleName) => {
-            const installName = installer.translateProductToModuleName(product, ModuleNamePurpose.install);
-            if (installName === moduleName) {
+        moduleInstallerOne.on('installModule', (name: Product | string) => {
+            if (product === name) {
                 checkInstalledDef.resolve();
             }
         });
@@ -360,7 +361,7 @@ suite('Installer', () => {
     getNamesAndValues<Product>(Product).forEach((prod) => {
         test(`Ensure install for Product: '${prod.name}' executes the right command in IModuleInstaller`, async function () {
             const productType = new ProductService().getProductType(prod.value);
-            if (productType === ProductType.DataScience) {
+            if (productType === ProductType.DataScience || productType === ProductType.Linter) {
                 return this.skip();
             }
             ioc.serviceManager.addSingletonInstance<IModuleInstaller>(
@@ -373,9 +374,11 @@ suite('Installer', () => {
             );
             ioc.serviceManager.addSingletonInstance<ITerminalHelper>(ITerminalHelper, instance(mock(TerminalHelper)));
             if (prod.value === Product.unittest || prod.value === Product.ctags || prod.value === Product.isort) {
-                return;
+                return undefined;
             }
             await testInstallingProduct(prod.value);
+
+            return undefined;
         });
     });
 });

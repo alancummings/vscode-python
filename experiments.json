@@ -1,17 +1,5 @@
 [
     {
-        "name": "ShowExtensionSurveyPrompt - enabled",
-        "salt": "ShowExtensionSurveyPrompt",
-        "max": 100,
-        "min": 60
-    },
-    {
-        "name": "ShowExtensionSurveyPrompt - control",
-        "salt": "ShowExtensionSurveyPrompt",
-        "min": 0,
-        "max": 40
-    },
-    {
         "name": "CollectLSRequestTiming - experiment",
         "salt": "CollectLSRequestTiming",
         "min": 0,
@@ -22,6 +10,18 @@
         "salt": "CollectLSRequestTiming",
         "min": 10,
         "max": 100
+    },
+    {
+        "name": "CollectNodeLSRequestTiming - experiment",
+        "salt": "CollectNodeLSRequestTiming",
+        "min": 0,
+        "max": 100
+    },
+    {
+        "name": "CollectNodeLSRequestTiming - control",
+        "salt": "CollectNodeLSRequestTiming",
+        "min": 0,
+        "max": 0
     },
     {
         "name": "DeprecatePythonPath - experiment",

@@ -9,12 +9,11 @@ import { DiscoveryVariants } from '../common/experiments/groups';
 import { traceError } from '../common/logger';
 import { FileChangeType } from '../common/platform/fileSystemWatcher';
 import { IDisposableRegistry, Resource } from '../common/types';
-import { getVersionString } from '../common/utils/version';
 import {
     CONDA_ENV_FILE_SERVICE,
     CONDA_ENV_SERVICE,
     CURRENT_PATH_SERVICE,
-    GetInterpreterLocatorOptions,
+    GetInterpreterOptions,
     GLOBAL_VIRTUAL_ENV_SERVICE,
     IComponentAdapter,
     ICondaService,
@@ -36,7 +35,7 @@ import { IPipEnvServiceHelper, IPythonInPathCommandProvider } from '../interpret
 import { VirtualEnvironmentManager } from '../interpreter/virtualEnvs';
 import { IVirtualEnvironmentManager } from '../interpreter/virtualEnvs/types';
 import { IServiceManager } from '../ioc/types';
-import { PythonEnvInfo, PythonEnvKind, PythonEnvSource, PythonReleaseLevel } from './base/info';
+import { PythonEnvInfo, PythonEnvKind, PythonEnvSource } from './base/info';
 import { buildEnvInfo } from './base/info/env';
 import { ILocator, PythonLocatorQuery } from './base/locator';
 import { isMacDefaultPythonPath } from './base/locators/lowLevel/macDefaultLocator';
@@ -68,7 +67,7 @@ import {
 import { WorkspaceVirtualEnvWatcherService } from './discovery/locators/services/workspaceVirtualEnvWatcherService';
 import { EnvironmentType, PythonEnvironment } from './info';
 import { EnvironmentsSecurity, IEnvironmentsSecurity } from './security';
-import { parseBasicVersion } from './base/info/pythonVersion';
+import { toSemverLikeVersion } from './base/info/pythonVersion';
 import { PythonVersion } from './info/pythonVersion';
 
 const convertedKinds = new Map(
@@ -81,6 +80,7 @@ const convertedKinds = new Map(
         [PythonEnvKind.CondaBase]: EnvironmentType.Conda,
         [PythonEnvKind.VirtualEnv]: EnvironmentType.VirtualEnv,
         [PythonEnvKind.Pipenv]: EnvironmentType.Pipenv,
+        [PythonEnvKind.Poetry]: EnvironmentType.Poetry,
         [PythonEnvKind.Venv]: EnvironmentType.Venv,
         [PythonEnvKind.VirtualEnvWrapper]: EnvironmentType.VirtualEnvWrapper,
     }),
@@ -106,28 +106,13 @@ function convertEnvInfo(info: PythonEnvInfo): PythonEnvironment {
 
     if (version !== undefined) {
         const { release, sysVersion } = version;
-        const versionPrefix = getVersionString(version);
-        let versionStr;
-
         if (release === undefined) {
-            versionStr = `${versionPrefix}-final`;
             env.sysVersion = '';
         } else {
-            const { level, serial } = release;
-            const releaseStr = level === PythonReleaseLevel.Final ? 'final' : `${level}${serial}`;
-            versionStr = `${versionPrefix}-${releaseStr}`;
             env.sysVersion = sysVersion;
         }
 
-        const result = parseBasicVersion(versionStr)[0];
-        const semverLikeVersion: PythonVersion = {
-            raw: versionPrefix,
-            major: result.major,
-            minor: result.minor,
-            patch: result.micro,
-            build: [],
-            prerelease: [],
-        };
+        const semverLikeVersion: PythonVersion = toSemverLikeVersion(version);
         env.version = semverLikeVersion;
     }
 
@@ -148,7 +133,7 @@ export async function isComponentEnabled(): Promise<boolean> {
     return results.includes(true);
 }
 
-export interface IPythonEnvironments extends ILocator {}
+interface IPythonEnvironments extends ILocator {}
 
 @injectable()
 class ComponentAdapter implements IComponentAdapter, IExtensionSingleActivationService {
@@ -278,12 +263,7 @@ class ComponentAdapter implements IComponentAdapter, IExtensionSingleActivationS
 
     public async getInterpreters(
         resource?: vscode.Uri,
-        options?: GetInterpreterLocatorOptions,
-        // Currently we have no plans to support GetInterpreterLocatorOptions:
-        // {
-        //     ignoreCache?: boolean
-        //     onSuggestion?: boolean;
-        // }
+        options?: GetInterpreterOptions,
         source?: PythonEnvSource[],
     ): Promise<PythonEnvironment[]> {
         // Notify locators are locating.
@@ -302,12 +282,7 @@ class ComponentAdapter implements IComponentAdapter, IExtensionSingleActivationS
 
     private async getInterpretersViaAPI(
         resource?: vscode.Uri,
-        options?: GetInterpreterLocatorOptions,
-        // Currently we have no plans to support GetInterpreterLocatorOptions:
-        // {
-        //     ignoreCache?: boolean
-        //     onSuggestion?: boolean;
-        // }
+        options?: GetInterpreterOptions,
         source?: PythonEnvSource[],
     ): Promise<PythonEnvironment[]> {
         if (options?.onSuggestion && this.allowOnSuggestionRefresh) {

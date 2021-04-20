@@ -20,6 +20,7 @@ import { ClipboardService } from './application/clipboard';
 import { CommandManager } from './application/commandManager';
 import { IPythonCommandManager } from './application/commands';
 import { ReloadVSCodeCommandHandler } from './application/commands/reloadCommand';
+import { ReportIssueCommandHandler } from './application/commands/reportIssueCommand';
 import { CustomEditorService } from './application/customEditorService';
 import { DebugService } from './application/debugService';
 import { DebugSessionTelemetry } from './application/debugSessionTelemetry';
@@ -51,7 +52,6 @@ import { CryptoUtils } from './crypto';
 import { EditorUtils } from './editor';
 import { ExperimentsManager } from './experiments/manager';
 import { ExperimentService } from './experiments/service';
-import { FeatureDeprecationManager } from './featureDeprecationManager';
 import {
     ExtensionInsidersDailyChannelRule,
     ExtensionInsidersOffChannelRule,
@@ -114,7 +114,6 @@ import {
     IEditorUtils,
     IExperimentsManager,
     IExtensions,
-    IFeatureDeprecationManager,
     IInstaller,
     IPathUtils,
     IPersistentStateFactory,
@@ -132,6 +131,7 @@ export function registerTypes(serviceManager: IServiceManager) {
     serviceManager.addSingleton<IExtensions>(IExtensions, Extensions);
     serviceManager.addSingleton<IRandom>(IRandom, Random);
     serviceManager.addSingleton<IPersistentStateFactory>(IPersistentStateFactory, PersistentStateFactory);
+    serviceManager.addBinding(IPersistentStateFactory, IExtensionSingleActivationService);
     serviceManager.addSingleton<ITerminalServiceFactory>(ITerminalServiceFactory, TerminalServiceFactory);
     serviceManager.addSingleton<IPathUtils>(IPathUtils, PathUtils);
     serviceManager.addSingleton<IApplicationShell>(IApplicationShell, ApplicationShell);
@@ -193,7 +193,6 @@ export function registerTypes(serviceManager: IServiceManager) {
         TerminalActivationProviders.pipenv,
     );
     serviceManager.addSingleton<IToolExecutionPath>(IToolExecutionPath, PipEnvExecutionPath, ToolExecutionPath.pipenv);
-    serviceManager.addSingleton<IFeatureDeprecationManager>(IFeatureDeprecationManager, FeatureDeprecationManager);
 
     serviceManager.addSingleton<IAsyncDisposableRegistry>(IAsyncDisposableRegistry, AsyncDisposableRegistry);
     serviceManager.addSingleton<IMultiStepInputFactory>(IMultiStepInputFactory, MultiStepInputFactory);
@@ -211,6 +210,10 @@ export function registerTypes(serviceManager: IServiceManager) {
     serviceManager.addSingleton<IExtensionSingleActivationService>(
         IExtensionSingleActivationService,
         ReloadVSCodeCommandHandler,
+    );
+    serviceManager.addSingleton<IExtensionSingleActivationService>(
+        IExtensionSingleActivationService,
+        ReportIssueCommandHandler,
     );
     serviceManager.addSingleton<IExtensionChannelService>(IExtensionChannelService, ExtensionChannelService);
     serviceManager.addSingleton<IExtensionChannelRule>(

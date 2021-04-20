@@ -310,6 +310,10 @@ export namespace InterpreterQuickPickList {
         openButtonLabel: localize('python.command.python.setInterpreter.title', 'Select Interpreter'),
         title: localize('InterpreterQuickPickList.browsePath.title', 'Select Python interpreter'),
     };
+    export const refreshInterpreterList = localize(
+        'InterpreterQuickPickList.refreshInterpreterList',
+        'Refresh Interpreter list',
+    );
 }
 export namespace ExtensionChannels {
     export const yesWeekly = localize('ExtensionChannels.yesWeekly', 'Yes, weekly');
@@ -411,7 +415,7 @@ export namespace StartPage {
     export const createJupyterNotebook = localize('StartPage.createJupyterNotebook', 'Create a Jupyter Notebook');
     export const notebookDescription = localize(
         'StartPage.notebookDescription',
-        '- Run "<div class="link italics" role="button" onclick={0}>Create New Blank Jupyter Notebook</div>" in the Command Palette (<div class="italics">Shift + Command + P</div>)<br />- Explore our <div class="link" role="button" onclick={1}>sample notebook</div> to learn about notebook features',
+        '- Run "<div class="link italics" role="button" onclick={0}>Create New Blank Notebook</div>" in the Command Palette (<div class="italics">Shift + Command + P</div>)<br />- Explore our <div class="link" role="button" onclick={1}>sample notebook</div> to learn about notebook features',
     );
     export const createAPythonFile = localize('StartPage.createAPythonFile', 'Create a Python File');
     export const pythonFileDescription = localize(
@@ -434,6 +438,10 @@ export namespace StartPage {
     export const tutorialAndDoc = localize(
         'StartPage.tutorialAndDoc',
         'Explore more features in our <a class="link" href={0}>Tutorials</a> or check <a class="link" href={1}>Documentation</a> for tips and troubleshooting.',
+    );
+    export const mailingList = localize(
+        'StartPage.mailingList',
+        '<a class="link" href={0}>Sign up</a> for tips and tutorials through our mailing list.',
     );
     export const dontShowAgain = localize('StartPage.dontShowAgain', "Don't show this page again");
     export const helloWorld = localize('StartPage.helloWorld', 'Hello world');

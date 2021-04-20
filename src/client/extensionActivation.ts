@@ -26,7 +26,6 @@ import {
     IDisposableRegistry,
     IExperimentService,
     IExperimentsManager,
-    IFeatureDeprecationManager,
     IOutputChannel,
 } from './common/types';
 import { noop } from './common/utils/misc';
@@ -128,6 +127,9 @@ async function activateLegacy(ext: ExtensionState): Promise<ActivationResult> {
     tensorBoardRegisterTypes(serviceManager);
 
     const experimentService = serviceContainer.get<IExperimentService>(IExperimentService);
+    // This guarantees that all experiment information has loaded & all telemetry will contain experiment info.
+    await experimentService.activate();
+
     const workspaceService = serviceContainer.get<IWorkspaceService>(IWorkspaceService);
     await setDefaultLanguageServerByExperiment(experimentService, workspaceService, serviceManager);
 
@@ -204,10 +206,6 @@ async function activateLegacy(ext: ExtensionState): Promise<ActivationResult> {
         context.subscriptions.push(languages.registerDocumentFormattingEditProvider(PYTHON, formatProvider));
         context.subscriptions.push(languages.registerDocumentRangeFormattingEditProvider(PYTHON, formatProvider));
     }
-
-    const deprecationMgr = serviceContainer.get<IFeatureDeprecationManager>(IFeatureDeprecationManager);
-    deprecationMgr.initialize();
-    context.subscriptions.push(deprecationMgr);
 
     context.subscriptions.push(new ReplProvider(serviceContainer));
 

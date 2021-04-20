@@ -1,8 +1,8 @@
 'use strict';
 
 // eslint-disable-next-line camelcase
-import * as child_process from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
 import {
     ConfigurationChangeEvent,
     ConfigurationTarget,
@@ -27,7 +27,6 @@ import { DEFAULT_INTERPRETER_SETTING, isTestExecution } from './constants';
 import { DeprecatePythonPath } from './experiments/groups';
 import { ExtensionChannels } from './insidersBuild/types';
 import { IS_WINDOWS } from './platform/constants';
-import * as internalPython from './process/internal/python';
 import {
     IAnalysisSettings,
     IAutoCompleteSettings,
@@ -40,6 +39,7 @@ import {
     ILoggingSettings,
     IPythonSettings,
     ISortImportSettings,
+    ITensorBoardSettings,
     ITerminalSettings,
     IWorkspaceSymbolSettings,
     LoggingLevelSettingType,
@@ -47,6 +47,7 @@ import {
 } from './types';
 import { debounceSync } from './utils/decorators';
 import { SystemVariables } from './variables/systemVariables';
+import { getOSType, OSType } from './utils/platform';
 
 const untildify = require('untildify');
 
@@ -118,6 +119,8 @@ export class PythonSettings implements IPythonSettings {
     public formatting!: IFormattingSettings;
 
     public autoComplete!: IAutoCompleteSettings;
+
+    public tensorBoard: ITensorBoardSettings | undefined;
 
     public testing!: ITestingSettings;
 
@@ -346,6 +349,7 @@ export class PythonSettings implements IPythonSettings {
             ? this.linting
             : {
                   enabled: false,
+                  cwd: undefined,
                   ignorePatterns: [],
                   flake8Args: [],
                   flake8Enabled: false,
@@ -415,6 +419,10 @@ export class PythonSettings implements IPythonSettings {
         );
         this.linting.mypyPath = getAbsolutePath(systemVariables.resolveAny(this.linting.mypyPath), workspaceRoot);
         this.linting.banditPath = getAbsolutePath(systemVariables.resolveAny(this.linting.banditPath), workspaceRoot);
+
+        if (this.linting.cwd) {
+            this.linting.cwd = getAbsolutePath(systemVariables.resolveAny(this.linting.cwd), workspaceRoot);
+        }
 
         const formattingSettings = systemVariables.resolveAny(pythonSettings.get<IFormattingSettings>('formatting'))!;
         if (this.formatting) {
@@ -582,6 +590,7 @@ export class PythonSettings implements IPythonSettings {
         }
 
         this.insidersChannel = pythonSettings.get<ExtensionChannels>('insidersChannel')!;
+        this.tensorBoard = pythonSettings.get<ITensorBoardSettings>('tensorBoard');
     }
 
     // eslint-disable-next-line class-methods-use-this
@@ -745,8 +754,8 @@ function getPythonExecutable(pythonPath: string): string {
             if (isValidPythonPath(path.join(pythonPath, executableName))) {
                 return path.join(pythonPath, executableName);
             }
-            if (isValidPythonPath(path.join(pythonPath, 'scripts', executableName))) {
-                return path.join(pythonPath, 'scripts', executableName);
+            if (isValidPythonPath(path.join(pythonPath, 'Scripts', executableName))) {
+                return path.join(pythonPath, 'Scripts', executableName);
             }
         } else {
             if (isValidPythonPath(path.join(pythonPath, executableName))) {
@@ -762,13 +771,10 @@ function getPythonExecutable(pythonPath: string): string {
 }
 
 function isValidPythonPath(pythonPath: string): boolean {
-    const [args, parse] = internalPython.isValid();
-    try {
-        const output = child_process.execFileSync(pythonPath, args, { encoding: 'utf8' });
-        return parse(output);
-    } catch (ex) {
-        return false;
-    }
+    return (
+        fs.existsSync(pythonPath) &&
+        path.basename(getOSType() === OSType.Windows ? pythonPath.toLowerCase() : pythonPath).startsWith('python')
+    );
 }
 
 function convertSettingTypeToLogLevel(setting: LoggingLevelSettingType | undefined): LogLevel | 'off' {
